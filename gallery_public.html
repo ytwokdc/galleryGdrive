@@ -331,13 +331,50 @@ async function initialLoad() {
 async function silentRefresh() {
   try {
     const fetched = await driveList();
+    const fetchedIds  = new Set(fetched.map(i => i.id));
     const existingIds = new Set(images.map(i => i.id));
-    const newImgs = fetched.filter(i => !existingIds.has(i.id));
-    if (!newImgs.length) return;
-    images = [...images, ...newImgs];
-    if (MODE === 'grid') injectGridImages(newImgs);
-    else injectSlideshowImages(newImgs);
-    setStatus(`+${newImgs.length} รูปใหม่ · รวม ${images.length} รูป`);
+
+    const newImgs     = fetched.filter(i => !existingIds.has(i.id));
+    const deletedIds  = [...existingIds].filter(id => !fetchedIds.has(id));
+
+    if (!newImgs.length && !deletedIds.length) return; // nothing changed
+
+    // ── Apply deletions ────────────────────────────────
+    if (deletedIds.length) {
+      const deletedSet = new Set(deletedIds);
+
+      // Remove from images array
+      images = images.filter(i => !deletedSet.has(i.id));
+
+      if (MODE === 'grid') {
+        // Remove cards from both tracks (set A and set B)
+        gridTracks.forEach(track => {
+          [...track.querySelectorAll('.grid-img-wrap')].forEach(el => {
+            if (deletedSet.has(el.dataset.id)) el.remove();
+          });
+        });
+        // Recalculate loop width
+        gridTotalWidth = images.length * (CARD_W + GAP);
+        // Clamp offset to avoid jumping past end
+        if (gridOffset >= gridTotalWidth) gridOffset = gridOffset % gridTotalWidth;
+      } else {
+        // Slideshow: remove deleted from upcoming queue
+        slideshowImages = slideshowImages.filter(i => !deletedSet.has(i.id));
+      }
+    }
+
+    // ── Apply additions ────────────────────────────────
+    if (newImgs.length) {
+      images = [...images, ...newImgs];
+      if (MODE === 'grid') injectGridImages(newImgs);
+      else injectSlideshowImages(newImgs);
+    }
+
+    // ── Status ─────────────────────────────────────────
+    const parts = [];
+    if (newImgs.length)    parts.push(`+${newImgs.length} รูปใหม่`);
+    if (deletedIds.length) parts.push(`-${deletedIds.length} รูปถูกลบ`);
+    setStatus(`${parts.join(' · ')} · รวม ${images.length} รูป`);
     hideStatusAfter(3000);
   } catch (_) {}
 }
