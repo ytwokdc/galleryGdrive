@@ -50,6 +50,58 @@
     pointer-events: none;
   }
 
+  /* ── Settings button ── */
+  #settingsBtn {
+    position: fixed; top: 16px; right: 16px; z-index: 100;
+    width: 36px; height: 36px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(12px);
+    transition: background 0.2s, transform 0.35s;
+  }
+  #settingsBtn:hover { background: rgba(255,255,255,0.14); transform: rotate(45deg); }
+  #settingsBtn svg { width: 17px; height: 17px; fill: none; stroke: var(--accent2); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── Speed panel ── */
+  #speedPanel {
+    position: fixed; top: 60px; right: 16px; z-index: 99;
+    width: 220px;
+    background: rgba(10,22,45,0.93);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    backdrop-filter: blur(20px);
+    padding: 16px 18px;
+    display: none;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+  }
+  #speedPanel.open { display: flex; }
+  #speedPanel label {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.45);
+  }
+  #speedPanel .row {
+    display: flex; align-items: center; gap: 10px;
+  }
+  #speedPanel input[type=range] {
+    flex: 1;
+    accent-color: var(--accent);
+    cursor: pointer;
+    height: 4px;
+  }
+  #speedPanel .val {
+    font-size: 13px;
+    color: var(--accent2);
+    min-width: 28px;
+    text-align: right;
+  }
+
   /* ── Status ── */
   #status {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -143,6 +195,23 @@
 </head>
 <body>
 
+<!-- Settings Button -->
+<button id="settingsBtn" title="Speed">
+  <svg viewBox="0 0 24 24">
+    <path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/>
+    <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+  </svg>
+</button>
+
+<!-- Speed Panel -->
+<div id="speedPanel">
+  <label>Grid Speed</label>
+  <div class="row">
+    <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="0.5" />
+    <span class="val" id="speedDisplay">0.5</span>
+  </div>
+</div>
+
 <!-- Status -->
 <div id="status">กรุณากรอก Folder ID และ API Key ในเมนู Settings</div>
 
@@ -162,6 +231,37 @@ const API_KEY     = 'AIzaSyBMu0QjThL87gQ4s_FeO77QS8WMEL2oph0';
 const MODE        = 'grid';       // 'grid' or 'slideshow'
 const REFRESH_MIN = 10 / 60;  // 10 seconds
 const GRID_SPEED  = 0.5;          // grid scroll speed (px/frame)
+
+// ── Settings button wiring (runs after DOM ready) ─────
+window.addEventListener('DOMContentLoaded', () => {
+  const btn     = document.getElementById('settingsBtn');
+  const panel   = document.getElementById('speedPanel');
+  const slider  = document.getElementById('speedSlider');
+  const display = document.getElementById('speedDisplay');
+
+  // Init slider value from GRID_SPEED
+  slider.value = GRID_SPEED;
+  display.textContent = GRID_SPEED;
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    panel.classList.toggle('open');
+  });
+
+  // Close when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!panel.contains(e.target) && e.target !== btn) {
+      panel.classList.remove('open');
+    }
+  });
+
+  // Live speed update
+  slider.addEventListener('input', () => {
+    const v = parseFloat(slider.value);
+    display.textContent = v.toFixed(1);
+    SCROLL_SPEED = v;
+  });
+});
 
 // ── State ──────────────────────────────────────────────
 let images = [];
