@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gallery</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg1: #0a1628;
+    --bg2: #0d2044;
+    --bg3: #112d5e;
+    --accent: #4a90d9;
+    --accent2: #6ab0f5;
+    --glass: rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.12);
+    --text: rgba(255,255,255,0.9);
+    --text-dim: rgba(255,255,255,0.5);
+    --card-w: 428.5px;
+    --card-h: 600px;
+    --gap: 20px;
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg1);
+    color: var(--text);
+  }
+
+  /* ── Gradient background ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(29,78,160,0.55) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 80% at 80% 90%, rgba(10,40,100,0.7) 0%, transparent 70%),
+      radial-gradient(ellipse 100% 100% at 50% 50%, #0d2044 0%, #0a1628 100%);
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.04;
+    pointer-events: none;
+  }
+
+  /* ── Status ── */
+  #status {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 90;
+    background: rgba(10,22,45,0.85);
+    border: 1px solid var(--glass-border);
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--text-dim);
+    backdrop-filter: blur(12px);
+    transition: opacity 0.4s;
+    pointer-events: none;
+  }
+
+  /* ══════════════════════════════
+     GRID MODE
+  ══════════════════════════════ */
+  #gridView {
+    position: fixed; inset: 0; z-index: 1;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 20px;
+    padding: 28px 0;
+    overflow: hidden;
+  }
+  #gridView.active { display: flex; }
+
+  .grid-row {
+    overflow: hidden;
+    flex: 1;
+    display: flex;
+    align-items: center;
+  }
+
+  .grid-track {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    will-change: transform;
+    flex-shrink: 0;
+  }
+
+  .grid-img-wrap {
+    flex-shrink: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+  }
+  .grid-img-wrap img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: opacity 0.5s;
+    opacity: 0;
+  }
+  .grid-img-wrap img.loaded { opacity: 1; }
+
+  /* ══════════════════════════════
+     SLIDESHOW MODE
+  ══════════════════════════════ */
+  #slideshowView {
+    position: fixed; inset: 0; z-index: 1;
+    display: none;
+    background: #000;
+  }
+  #slideshowView.active { display: block; }
+
+  .slide {
+    position: absolute; inset: 0;
+    opacity: 0;
+    transition: opacity 1.2s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .slide.visible { opacity: 1; }
+  .slide img {
+    max-width: min(857px, 100vw);
+    max-height: min(1200px, 100vh);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Status -->
+<div id="status">กรุณากรอก Folder ID และ API Key ในเมนู Settings</div>
+
+<!-- Grid View -->
+<div id="gridView">
+  <div class="grid-row"><div class="grid-track" id="gridTrack0"></div></div>
+  <div class="grid-row"><div class="grid-track" id="gridTrack1"></div></div>
+</div>
+
+<!-- Slideshow View -->
+<div id="slideshowView"></div>
+
+<script>
+// ── Hardcoded config ───────────────────────────────────
+const FOLDER_ID   = '176I97lcLGk-ttmTd3ExX03SCMsYFpFto';
+const API_KEY     = 'AIzaSyBMu0QjThL87gQ4s_FeO77QS8WMEL2oph0';
+const MODE        = 'grid';       // 'grid' or 'slideshow'
+const REFRESH_MIN = 5;            // auto-refresh interval (minutes)
+const GRID_SPEED  = 0.5;          // grid scroll speed (px/frame)
+
+// ── State ──────────────────────────────────────────────
+let images = [];
+let gridAnimFrame = null;
+let gridOffset = 0;
+let gridTotalWidth = 0;
+const IMG_W = 857;
+const IMG_H = 1200;
+const GAP = 20;
+let CARD_W = 0, CARD_H = 0;
+let SCROLL_SPEED = GRID_SPEED;
+
+let slideshowImages = [];
+let slideshowIdx = 0;
+let slideshowTimer = null;
+let autoRefreshInterval = null;
+
+// ── UI refs ────────────────────────────────────────────
+const statusEl      = document.getElementById('status');
+const gridView      = document.getElementById('gridView');
+const gridTracks    = [
+  document.getElementById('gridTrack0'),
+  document.getElementById('gridTrack1')
+];
+const slideshowView = document.getElementById('slideshowView');
+
+function calcCardDims() {
+  const vpad = 56 + 20;
+  const h = Math.floor((window.innerHeight - vpad) / 2);
+  const w = Math.round(h * (IMG_W / IMG_H) * 10) / 10;
+  return { w, h };
+}
+
+// ════════════════════════════════════════
+// FETCH
+// ════════════════════════════════════════
+async function driveList() {
+  const mimeTypes = ['image/jpeg','image/png','image/gif','image/webp','image/bmp'];
+  const mimeQuery = mimeTypes.map(m => `mimeType='${m}'`).join(' or ');
+  let all = [], pageToken = '';
+  do {
+    const url = `https://www.googleapis.com/drive/v3/files?` +
+      `q=(${mimeQuery}) and '${FOLDER_ID}' in parents and trashed=false` +
+      `&fields=nextPageToken,files(id,name)&pageSize=100` +
+      (pageToken ? `&pageToken=${pageToken}` : '') +
+      `&key=${API_KEY}`;
+    const res = await fetch(url);
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message||'API error'); }
+    const data = await res.json();
+    all = all.concat(data.files || []);
+    pageToken = data.nextPageToken || '';
+  } while (pageToken);
+  return all.map(f => ({ id: f.id, src: `https://drive.google.com/thumbnail?id=${f.id}&sz=w800` }));
+}
+
+async function initialLoad() {
+  try {
+    const fetched = await driveList();
+    if (!fetched.length) { setStatus('ไม่พบรูปภาพ'); return; }
+    images = fetched;
+    setStatus(`โหลดแล้ว ${images.length} รูป`);
+    hideStatusAfter(2500);
+    startDisplay();
+  } catch (e) { setStatus('Error: ' + e.message); }
+}
+
+async function silentRefresh() {
+  try {
+    const fetched = await driveList();
+    const existingIds = new Set(images.map(i => i.id));
+    const newImgs = fetched.filter(i => !existingIds.has(i.id));
+    if (!newImgs.length) return;
+    images = [...images, ...newImgs];
+    if (MODE === 'grid') injectGridImages(newImgs);
+    else injectSlideshowImages(newImgs);
+    setStatus(`+${newImgs.length} รูปใหม่ · รวม ${images.length} รูป`);
+    hideStatusAfter(3000);
+  } catch (_) {}
+}
+
+function startAutoRefresh() {
+  clearInterval(autoRefreshInterval);
+  autoRefreshInterval = setInterval(silentRefresh, REFRESH_MIN * 60 * 1000);
+}
+
+// ════════════════════════════════════════
+// START / STOP
+// ════════════════════════════════════════
+function startDisplay() {
+  stopAll();
+  if (MODE === 'grid') startGrid();
+  else startSlideshow();
+}
+
+function stopAll() {
+  cancelAnimationFrame(gridAnimFrame);
+  clearTimeout(slideshowTimer);
+  gridView.classList.remove('active');
+  slideshowView.classList.remove('active');
+  gridTracks.forEach(t => { t.innerHTML = ''; });
+  slideshowView.innerHTML = '';
+  gridOffset = 0;
+  slideshowIdx = 0;
+  slideshowImages = [];
+}
+
+// ════════════════════════════════════════
+// GRID MODE
+// ════════════════════════════════════════
+function buildGridSet(imgList, cardW, cardH) {
+  const frag = document.createDocumentFragment();
+  imgList.forEach(img => {
+    const wrap = document.createElement('div');
+    wrap.className = 'grid-img-wrap';
+    wrap.dataset.id = img.id;
+    wrap.style.width  = cardW + 'px';
+    wrap.style.height = cardH + 'px';
+    const el = document.createElement('img');
+    el.src = img.src;
+    el.onload = () => el.classList.add('loaded');
+    el.onerror = () => { wrap.style.opacity = '0'; wrap.style.pointerEvents = 'none'; };
+    wrap.appendChild(el);
+    frag.appendChild(wrap);
+  });
+  return frag;
+}
+
+function startGrid() {
+  const dims = calcCardDims();
+  CARD_W = dims.w; CARD_H = dims.h;
+  gridView.classList.add('active');
+  gridOffset = 0;
+  rebuildGridDOM(images);
+  animateGrid();
+}
+
+function rebuildGridDOM(imgList) {
+  const dims = calcCardDims();
+  CARD_W = dims.w; CARD_H = dims.h;
+  const newSetWidth = imgList.length * (CARD_W + GAP);
+  const newOffset   = gridTotalWidth > 0 ? (gridOffset % newSetWidth) : 0;
+  gridTracks.forEach(track => {
+    const frag = document.createDocumentFragment();
+    frag.appendChild(buildGridSet(imgList, CARD_W, CARD_H));
+    frag.appendChild(buildGridSet(imgList, CARD_W, CARD_H));
+    track.innerHTML = '';
+    track.appendChild(frag);
+  });
+  gridTotalWidth = newSetWidth;
+  gridOffset     = newOffset;
+  applyTrackTransforms();
+}
+
+function applyTrackTransforms() {
+  const half = gridTotalWidth / 2;
+  const off0 = gridOffset % gridTotalWidth;
+  const off1 = (gridOffset + half) % gridTotalWidth;
+  gridTracks[0].style.transform = `translateX(${-off0}px)`;
+  gridTracks[1].style.transform = `translateX(${-off1}px)`;
+}
+
+function injectGridImages(newImgs) {
+  if (!newImgs.length) return;
+  const existingCount = images.length - newImgs.length;
+  gridTracks.forEach(track => {
+    const fragA = buildGridSet(newImgs, CARD_W, CARD_H);
+    const fragB = buildGridSet(newImgs, CARD_W, CARD_H);
+    const setBFirst = track.children[existingCount];
+    track.insertBefore(fragA, setBFirst);
+    track.appendChild(fragB);
+  });
+  gridTotalWidth = images.length * (CARD_W + GAP);
+}
+
+function animateGrid() {
+  gridOffset += SCROLL_SPEED;
+  if (gridOffset >= gridTotalWidth) gridOffset -= gridTotalWidth;
+  applyTrackTransforms();
+  gridAnimFrame = requestAnimationFrame(animateGrid);
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  if (MODE !== 'grid' || !gridView.classList.contains('active')) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => rebuildGridDOM(images), 200);
+});
+
+// ════════════════════════════════════════
+// SLIDESHOW MODE
+// ════════════════════════════════════════
+function startSlideshow() {
+  slideshowView.classList.add('active');
+  slideshowImages = shuffle([...images]);
+  slideshowIdx = 0;
+  advanceSlide();
+}
+
+function advanceSlide() {
+  const pool = slideshowImages.length ? slideshowImages : images;
+  const img = pool[slideshowIdx % pool.length];
+  const slide = document.createElement('div');
+  slide.className = 'slide';
+  const el = document.createElement('img');
+  el.src = img.src; el.alt = '';
+  slide.appendChild(el);
+  slideshowView.appendChild(slide);
+  requestAnimationFrame(() => requestAnimationFrame(() => slide.classList.add('visible')));
+  const slides = slideshowView.querySelectorAll('.slide');
+  if (slides.length > 2) {
+    slides[0].classList.remove('visible');
+    setTimeout(() => slides[0].remove(), 1400);
+  }
+  slideshowTimer = setTimeout(() => {
+    slideshowIdx++;
+    if (slideshowIdx >= slideshowImages.length) {
+      slideshowImages = shuffle([...images]);
+      slideshowIdx = 0;
+    }
+    advanceSlide();
+  }, 6000);
+}
+
+function injectSlideshowImages(newImgs) {
+  for (const img of newImgs) {
+    const insertAt = slideshowIdx + 1 +
+      Math.floor(Math.random() * (slideshowImages.length - slideshowIdx));
+    slideshowImages.splice(insertAt, 0, img);
+  }
+}
+
+// ── Utilities ──────────────────────────────────────────
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function setStatus(msg) { statusEl.textContent = msg; statusEl.style.opacity = '1'; }
+let statusTimeout;
+function hideStatusAfter(ms) {
+  clearTimeout(statusTimeout);
+  statusTimeout = setTimeout(() => { statusEl.style.opacity = '0'; }, ms);
+}
+
+// ── Start ──────────────────────────────────────────────
+window.addEventListener('load', () => {
+  setStatus('กำลังโหลดรูปภาพ...');
+  initialLoad().then(startAutoRefresh);
+});
+</script>
+</body>
+</html>
